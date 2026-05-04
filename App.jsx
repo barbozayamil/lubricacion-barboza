@@ -415,28 +415,74 @@ function ModalNuevaPlan({onClose,onSave,T}){
   const [nombreArchivo,setNombreArchivo]=useState("");
   const [cargando,setCargando]=useState(false);
 
+  // Parser para formato LUBRICACION BARBOZA del Excel
+  const parsearXLSX=function(rows){
+    var tareas=[];
+    var areaActual="Planta";
+    var catActual="General";
+    var idx=0;
+    // Areas principales - cuando aparece una de estas cambia el area grande
+    var AREAS_PRINCIPALES=["PLANTA","TRITURACION","HEAP LEACHING","MOVIL","CORRECTIV"];
+    for(var i=0;i<rows.length;i++){
+      var row=rows[i];
+      var col0=row[0];
+      var col1=(row[1]||"").toString().trim();
+      var col2=(row[2]||"").toString().trim();
+      var col3=(row[3]||"").toString().trim();
+      var col4=(row[4]||"").toString().trim();
+      // Skip first 2 rows (period header + column names)
+      if(i<2) continue;
+      // Skip empty rows
+      if(!col0 && !col1 && !col2) continue;
+      // Detect section header: col0 is null and col1 is a label (not a SAP code)
+      if((col0===null||col0===undefined||col0==="") && col1 && !col1.startsWith("AR00") && !col1.startsWith("ar00")){
+        var up=col1.toUpperCase();
+        // Is it a main area or an AREA XXX sub-area?
+        var esAreaPrincipal=AREAS_PRINCIPALES.some(function(a){return up.indexOf(a)>=0;});
+        var esSubArea=up.indexOf("AREA ")>=0||up.indexOf("ÁREA ")>=0;
+        if(esAreaPrincipal||esSubArea){
+          areaActual=col1.trim();
+          catActual=col1.trim();
+        } else {
+          // It's a sub-category (Preventivas Semanales, LUBRICACION DE CINTAS, etc.)
+          catActual=col1.trim();
+        }
+        continue;
+      }
+      // Skip string headers in col0
+      if(col0 && typeof col0==="string") continue;
+      // Real task: col0 is a number
+      var itemNum=parseInt(col0);
+      if(isNaN(itemNum)||itemNum<=0) continue;
+      if(!col2||col2.length<3) continue;
+      idx++;
+      tareas.push({
+        id:"N"+Date.now()+"_"+idx,
+        cat:catActual,
+        codigo:col1||"",
+        tarea:col2,
+        equipo:col3||"",
+        area:areaActual,
+        orden:col4?col4.toString():"",
+        est:"pendiente",
+        reg:null,
+        enDia:false
+      });
+    }
+    return tareas;
+  };
+
   const parsear=function(txt){
     return txt.split("\n").filter(function(l){return l.trim();}).map(function(l,i){
       const sep=l.indexOf("\t")>=0?"\t":",";
       const p=l.split(sep).map(function(v){
         let s=v.trim();
-        while(s.length>0 && (s.charAt(0)===String.fromCharCode(34) || s.charAt(0)===String.fromCharCode(39))) s=s.substring(1);
-        while(s.length>0 && (s.charAt(s.length-1)===String.fromCharCode(34) || s.charAt(s.length-1)===String.fromCharCode(39))) s=s.substring(0,s.length-1);
+        while(s.length>0&&(s.charAt(0)===String.fromCharCode(34)||s.charAt(0)===String.fromCharCode(39)))s=s.substring(1);
+        while(s.length>0&&(s.charAt(s.length-1)===String.fromCharCode(34)||s.charAt(s.length-1)===String.fromCharCode(39)))s=s.substring(0,s.length-1);
         return s.trim();
       });
-      return {
-        id:"N"+Date.now()+"_"+i,
-        cat:p[0]||"General",
-        codigo:p[1]||"",
-        tarea:p[2]||l.trim(),
-        equipo:p[3]||"",
-        area:p[4]||"Sin area",
-        orden:p[5]||"",
-        est:"pendiente",
-        reg:null,
-        enDia:false
-      };
-    }).filter(function(t){return t.tarea && t.tarea.length>2;});
+      return{id:"N"+Date.now()+"_"+i,cat:p[0]||"General",codigo:p[1]||"",tarea:p[2]||l.trim(),equipo:p[3]||"",area:p[4]||"Sin area",orden:p[5]||"",est:"pendiente",reg:null,enDia:false};
+    }).filter(function(t){return t.tarea&&t.tarea.length>2;});
   };
 
   const leerArchivo=function(e){
@@ -454,8 +500,16 @@ function ModalNuevaPlan({onClose,onSave,T}){
             const sheetName=wb.SheetNames.find(function(n){return n.toUpperCase().indexOf("LUBRICACION")>=0;})||wb.SheetNames[0];
             const ws=wb.Sheets[sheetName];
             const rows=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
-            const tsv=rows.map(function(r){return r.join("\t");}).join("\n");
-            setTexto(tsv);
+            // Use smart parser for LUBRICACION BARBOZA format
+            const parsed=parsearXLSX(rows);
+            if(parsed.length>0){
+              // Store as JSON for direct use
+              setTexto("__XLSX__"+JSON.stringify(parsed));
+            } else {
+              // Fallback: convert to TSV
+              const tsv=rows.map(function(r){return r.join("\t");}).join("\n");
+              setTexto(tsv);
+            }
           }else{
             alert("Para leer xlsx exporta el archivo como CSV desde Excel");
           }
@@ -477,7 +531,9 @@ function ModalNuevaPlan({onClose,onSave,T}){
     }
   };
 
-  const tareasFinales=parsear(texto);
+  const tareasFinales=texto.startsWith("__XLSX__")
+    ?JSON.parse(texto.slice(8))
+    :parsear(texto);
 
   return (
     <Overlay onClose={onClose} maxW={580}>
