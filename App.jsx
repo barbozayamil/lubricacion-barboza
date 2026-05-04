@@ -32,6 +32,36 @@ const LS = {
 };
 
 
+
+// ─── SUPABASE SYNC ────────────────────────────────────
+const SB_URL = "https://mfidtiyjsozudyiojvka.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1maWR0aXlqc296dWR5aW9qdmthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NTI5NzYsImV4cCI6MjA5MzQyODk3Nn0.KDw2W5SWZGCgn8HK7f4zEf7KGrp92FVNJNYt-SJ6GaM";
+
+const sbGet = async (key) => {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/app_data?key=eq.${key}&select=value`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+    });
+    const d = await r.json();
+    return d && d[0] ? d[0].value : null;
+  } catch { return null; }
+};
+
+const sbSet = async (key, value) => {
+  try {
+    await fetch(`${SB_URL}/rest/v1/app_data`, {
+      method: "POST",
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${SB_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates"
+      },
+      body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
+    });
+  } catch {}
+};
+
 // ─── CATÁLOGOS GLOBALES INICIALES ─────────────────────
 const HERRAMIENTAS_INIT = [
   {id:"H001",nombre:"Llave Allen 4mm",      tipo:"llave",    detalle:"Hexagonal métrica"},
@@ -1574,6 +1604,7 @@ export default function App(){
   const [paradas,setParadas]=useState(()=>LS.get("lubri_paradas",[]));
   const [equipos,setEquipos]=useState(()=>LS.get("lubri_equipos",[]));
   const [grupos,setGrupos]=useState(()=>LS.get("lubri_grupos",[]));
+  const [sbOnline,setSbOnline]=useState(false);
   const [catHerr,setCatHerr]=useState(()=>{const v=LS.get("lubri_catHerr",[]);return v.length>0?v:HERRAMIENTAS_INIT;});
   const [catMat,setCatMat]=useState(()=>{const v=LS.get("lubri_catMat",[]);return v.length>0?v:MATERIALES_INIT;});
   const [mTec,setMTec]=useState(false); const [mNueva,setMNueva]=useState(false);
@@ -1584,17 +1615,40 @@ export default function App(){
 
   useEffect(()=>LS.set("lubri_tema",tema),[tema]);
   useEffect(()=>LS.set("lubri_sesion",sesion),[sesion]);
-  useEffect(()=>LS.set("lubri_usuarios",usuarios),[usuarios]);
   useEffect(()=>LS.set("lubri_area",areaActiva),[areaActiva]);
   useEffect(()=>LS.set("lubri_tareas",tareas),[tareas]);
   useEffect(()=>LS.set("lubri_periodo",periodo),[periodo]);
   useEffect(()=>LS.set("lubri_historial",historial),[historial]);
-  useEffect(()=>LS.set("lubri_tecnicos",tecnicos),[tecnicos]);
-  useEffect(()=>LS.set("lubri_paradas",paradas),[paradas]);
   useEffect(()=>LS.set("lubri_equipos",equipos),[equipos]);
-  useEffect(()=>LS.set("lubri_grupos",grupos),[grupos]);
   useEffect(()=>LS.set("lubri_catHerr",catHerr),[catHerr]);
   useEffect(()=>LS.set("lubri_catMat",catMat),[catMat]);
+
+  // ── Supabase: cargar datos compartidos al iniciar ──
+  useEffect(()=>{
+    const cargar = async () => {
+      const [u,t,g,v,p] = await Promise.all([
+        sbGet("usuarios"), sbGet("tecnicos"), sbGet("grupos"),
+        sbGet("viento"),   sbGet("paradas")
+      ]);
+      if(u){ setUsuarios(u); LS.set("lubri_usuarios",u); }
+      if(t){ setTecnicos(t); LS.set("lubri_tecnicos",t); }
+      if(g){ setGrupos(g);   LS.set("lubri_grupos",g); }
+      if(v){ setViento(v);   }
+      if(p){ setParadas(p);  LS.set("lubri_paradas",p); }
+      setSbOnline(true);
+    };
+    cargar();
+    // Polling cada 30 segundos para sincronizar entre dispositivos
+    const interval = setInterval(cargar, 30000);
+    return () => clearInterval(interval);
+  },[]);
+
+  // ── Supabase: guardar cuando cambian datos compartidos ──
+  useEffect(()=>{ if(sbOnline){ sbSet("usuarios",usuarios); LS.set("lubri_usuarios",usuarios); } },[usuarios]);
+  useEffect(()=>{ if(sbOnline){ sbSet("tecnicos",tecnicos); LS.set("lubri_tecnicos",tecnicos); } },[tecnicos]);
+  useEffect(()=>{ if(sbOnline){ sbSet("grupos",grupos);     LS.set("lubri_grupos",grupos); } },[grupos]);
+  useEffect(()=>{ if(sbOnline){ sbSet("viento",viento); } },[viento]);
+  useEffect(()=>{ if(sbOnline){ sbSet("paradas",paradas);   LS.set("lubri_paradas",paradas); } },[paradas]);
 
   const T=TEMAS[tema];
   const esAdmin=sesion?.rol==="admin";
@@ -1664,6 +1718,7 @@ export default function App(){
           <span style={{fontSize:20}}>⚙️</span>
           <div>
             <div style={{fontWeight:900,fontSize:13,letterSpacing:2,background:"linear-gradient(135deg,#d4af37,#ffd700)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GOLD DIJITAL</div>
+            <div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}><div style={{width:6,height:6,borderRadius:"50%",background:sbOnline?"#34d399":"#64748b",boxShadow:sbOnline?"0 0 6px #34d399":"none"}}/><span style={{fontSize:9,color:sbOnline?"#34d399":"#64748b"}}>{sbOnline?"Sincronizado":"Sin conexión"}</span></div>
             <div style={{fontSize:10,color:T.textMuted,display:"flex",gap:6,alignItems:"center"}}>
               <span>Periodo: {periodo}</span>
               <span style={{background:T.accent,color:"#fff",borderRadius:99,padding:"1px 7px",fontSize:9,fontWeight:700}}>{areaActiva}</span>
