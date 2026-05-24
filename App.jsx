@@ -638,7 +638,7 @@ function EquiposTab({equipos,setEquipos,materiales,setMateriales,specialty,user,
       );
     });
 
-  const save=()=>{
+  const save=async()=>{
     if(!form.tag.trim()||!form.nombre.trim()){setErr("El TAG y el Nombre son obligatorios.");return;}
     const newEq = {id:Date.now(),tag:form.tag.trim(),subtag:form.subtag.trim(),nombre:form.nombre.trim(),specialty:specialty.id,lastIntervention:"—",photo:form.photo||null};
     await saveDoc("equipos", newEq.id, newEq);
@@ -777,7 +777,7 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
 
   const filtered=materiales.filter(m=>m.specialty===specialty.id).filter(m=>filter==="todos"||m.tipo===filter);
 
-  const save=()=>{
+  const save=async()=>{
     if(!form.nombre.trim()||!form.codigo.trim()){setErr("El Nombre y el Código son obligatorios.");return;}
     const icons={lubricante:"🛢️",filtro:"🔩",herramienta:"🔧",componente:"⚡",repuesto:"⚙️"};
     const newMat = {id:Date.now(),nombre:form.nombre.trim(),codigo:form.codigo.trim(),tipo:form.tipo,specialty:specialty.id,stock:form.stock||"—",icon:icons[form.tipo]||"📦",photo:form.photo||null,equipoIds:[]};
@@ -1054,7 +1054,7 @@ function ActividadTab({activityLog, setActivityLog, usuarios, equipos, setEquipo
     setEditEqErr("");
   };
 
-  const guardarEditEquipo = () => {
+  const guardarEditEquipo = async () => {
     if(!editEquipo.tag.trim()||!editEquipo.nombre.trim()){
       setEditEqErr("El TAG y el Nombre son obligatorios."); return;
     }
@@ -1545,4 +1545,3 @@ export default function GoldBox() {
   const handleLogout = async()=>{ await signOut(auth); setUser(null); setSpecialty(null); setScreen("login"); };
   return <MainApp user={user} specialty={specialty} onLogout={handleLogout}/>;;
 }
-
