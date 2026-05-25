@@ -246,13 +246,20 @@ function LoginScreen({onLogin}) {
   const [pass,setPass]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
-  const handle=()=>{
+  const handle=async()=>{
     if(!user.trim()||!pass.trim()){setError("Completá usuario y contraseña.");return;}
     setLoading(true); setError("");
-    setTimeout(()=>{
+    try {
+      const cred = await signInWithEmailAndPassword(auth, user.trim(), pass.trim());
+      const snap = await getDocs(collection(db,"usuarios"));
+      let perfil = null;
+      snap.forEach(d=>{ if(d.data().email===user.trim()) perfil=d.data(); });
+      if(!perfil) perfil = {name:user.trim(), role:"superuser", specialty:"lubricacion"};
+      onLogin({...perfil, uid: cred.user.uid});
+    } catch(e){
+      setError("Usuario o contraseña incorrectos.");
       setLoading(false);
-      onLogin({name:user.trim()||"Usuario",role:"superuser",specialty:"lubricacion"});
-    },1000);
+    }
   };
   return (
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",
