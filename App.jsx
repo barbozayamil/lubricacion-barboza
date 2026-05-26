@@ -1488,9 +1488,23 @@ function MainApp({user,specialty,onLogout}) {
   const [sideOpen,setSideOpen]     = useState(true);
   // ── SYNC FIRESTORE EN TIEMPO REAL ──
   useEffect(()=>{
-    const unsubEq  = onSnapshot(collection(db,"equipos"),   snap=>{ if(!snap.empty) setEquipos(snap.docs.map(d=>({...d.data(),id:d.id}))); });
-    const unsubMat = onSnapshot(collection(db,"materiales"),snap=>{ if(!snap.empty) setMateriales(snap.docs.map(d=>({...d.data(),id:d.id}))); });
-    const unsubUs  = onSnapshot(collection(db,"usuarios"),  snap=>{ if(!snap.empty) setUsuarios(snap.docs.map(d=>({...d.data(),id:d.id}))); });
+    let loaded = {eq:false, mat:false};
+    const checkLoaded = () => { if(loaded.eq && loaded.mat) setCargando(false); };
+
+    const unsubEq = onSnapshot(collection(db,"equipos"), snap=>{
+      setEquipos(snap.empty ? [] : snap.docs.map(d=>({...d.data(), id:d.id})));
+      loaded.eq = true; checkLoaded();
+    }, ()=>{ loaded.eq=true; checkLoaded(); });
+
+    const unsubMat = onSnapshot(collection(db,"materiales"), snap=>{
+      setMateriales(snap.empty ? [] : snap.docs.map(d=>({...d.data(), id:d.id})));
+      loaded.mat = true; checkLoaded();
+    }, ()=>{ loaded.mat=true; checkLoaded(); });
+
+    const unsubUs = onSnapshot(collection(db,"usuarios"), snap=>{
+      if(!snap.empty) setUsuarios(snap.docs.map(d=>({...d.data(), id:d.id})));
+    });
+
     return ()=>{ unsubEq(); unsubMat(); unsubUs(); };
   },[]);
   const [activityLog,setActivityLog] = useState([
