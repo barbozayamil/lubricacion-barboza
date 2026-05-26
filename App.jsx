@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 // ── FIREBASE ─────────────────────────────────────────────────────────────────
 import { initializeApp }                                    from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, signOut }     from "firebase/auth";
+import { getDatabase, ref, set, get, onValue, remove }     from "firebase/database";
 import { getFirestore, collection, doc, setDoc, getDocs,
          onSnapshot, deleteDoc }                            from "firebase/firestore";
 
@@ -12,11 +12,27 @@ const firebaseConfig = {
   storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  databaseURL:       "https://goldbox-mineria-default-rtdb.firebaseio.com",
 };
 const firebaseApp = initializeApp(firebaseConfig);
-const auth        = getAuth(firebaseApp);
+const rtdb        = getDatabase(firebaseApp);
 const db          = getFirestore(firebaseApp);
 const saveDoc     = async (col, id, data) => await setDoc(doc(db, col, String(id)), data);
+
+// ── HELPERS REALTIME DB ───────────────────────────────────────────────────────
+const rtSet  = async (path, data) => await set(ref(rtdb, path), data);
+const rtGet  = async (path)       => { const s = await get(ref(rtdb, path)); return s.exists() ? s.val() : null; };
+
+// Simple hash para contraseñas (no es criptográfico pero es suficiente para este uso)
+const simpleHash = (str) => {
+  let hash = 0;
+  for(let i=0; i<str.length; i++){
+    const c = str.charCodeAt(i);
+    hash = ((hash<<5)-hash)+c;
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(16);
+};
 
 // Google Fonts – Orbitron (display) + Exo 2 (body)
 const FONTS = document.createElement("link");
@@ -250,14 +266,33 @@ function LoginScreen({onLogin}) {
     if(!user.trim()||!pass.trim()){setError("Completá usuario y contraseña.");return;}
     setLoading(true); setError("");
     try {
-      const cred = await signInWithEmailAndPassword(auth, user.trim(), pass.trim());
-      const snap = await getDocs(collection(db,"usuarios"));
-      let perfil = null;
-      snap.forEach(d=>{ if(d.data().email===user.trim()) perfil=d.data(); });
-      if(!perfil) perfil = {name:user.trim(), role:"superuser", specialty:"lubricacion"};
-      onLogin({...perfil, uid: cred.user.uid});
+      // Buscar usuario en Realtime Database por username
+      const userData = await rtGet("usuarios/" + user.trim().toLowerCase().replace(/\s+/g,"_"));
+      if(!userData){
+        // Si no existe, verificar si es el superusuario por defecto
+        if(user.trim().toLowerCase()==="admin" && pass.trim()==="master1599"){
+          onLogin({name:"Yamil García", role:"superuser", specialty:"lubricacion", username:"admin"});
+          return;
+        }
+        setError("Usuario no encontrado.");
+        setLoading(false);
+        return;
+      }
+      // Verificar contraseña
+      const passHash = simpleHash(pass.trim());
+      if(userData.passHash !== passHash){
+        setError("Contraseña incorrecta.");
+        setLoading(false);
+        return;
+      }
+      if(!userData.active){
+        setError("Usuario desactivado. Contactá al administrador.");
+        setLoading(false);
+        return;
+      }
+      onLogin({...userData});
     } catch(e){
-      setError("Usuario o contraseña incorrectos.");
+      setError("Error al conectar. Intentá de nuevo.");
       setLoading(false);
     }
   };
@@ -900,9 +935,25 @@ function UsuariosTab({usuarios,setUsuarios}) {
   const save=()=>{
     if(!form.name.trim()||!form.user.trim()){setErr("Nombre y usuario son obligatorios.");return;}
     if(editUser){
-      setUsuarios(prev=>prev.map(u=>u.id===editUser.id?{...u,...form}:u));
+      const updated = {...editUser, ...form, name:form.name.trim(), user:form.user.trim()};
+      if(form.pass.trim()) updated.passHash = simpleHash(form.pass.trim());
+      delete updated.pass;
+      setUsuarios(prev=>prev.map(u=>u.id===editUser.id?updated:u));
+      // Guardar en Realtime DB
+      const ukey = form.user.trim().toLowerCase().replace(/\s+/g,"_");
+      rtSet("usuarios/"+ukey, {...updated});
     } else {
-      setUsuarios(prev=>[...prev,{id:Date.now(),name:form.name.trim(),user:form.user.trim(),role:form.role,specialty:form.specialty,active:true}]);
+      if(!form.pass.trim()){setErr("La contraseña es obligatoria.");return;}
+      const newU = {
+        id:Date.now(), name:form.name.trim(), user:form.user.trim(),
+        role:form.role, specialty:form.specialty, active:true,
+        passHash: simpleHash(form.pass.trim()),
+        username: form.user.trim().toLowerCase().replace(/\s+/g,"_"),
+      };
+      setUsuarios(prev=>[...prev, newU]);
+      // Guardar en Realtime DB
+      const ukey = form.user.trim().toLowerCase().replace(/\s+/g,"_");
+      rtSet("usuarios/"+ukey, newU);
     }
     setShowModal(false);setErr("");
   };
@@ -1549,6 +1600,5 @@ export default function GoldBox() {
   if(screen==="login")     return <LoginScreen     onLogin={u=>{setUser(u);setScreen("welcome");}}/>;
   if(screen==="welcome")   return <WelcomeScreen    user={user} onContinue={()=>setScreen("specialty")}/>;
   if(screen==="specialty") return <SpecialtySelector user={user} onSelect={sp=>{setSpecialty(sp);setScreen("app");}}/>;
-  const handleLogout = async()=>{ await signOut(auth); setUser(null); setSpecialty(null); setScreen("login"); };
-  return <MainApp user={user} specialty={specialty} onLogout={handleLogout}/>;;
+  return <MainApp user={user} specialty={specialty} onLogout={()=>{setUser(null);setSpecialty(null);setScreen("login");}}/>;;
 }
