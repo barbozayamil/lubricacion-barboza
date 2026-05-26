@@ -445,15 +445,16 @@ function EquipoDetail({equipo,materiales,setMateriales,specialty,onBack,user,log
 
   const vincular = async (mat) => {
     const updated = {...mat, equipoIds:[...(mat.equipoIds||[]), equipo.id]};
+    setMateriales(prev=>prev.map(m=>m.id===mat.id?updated:m)); // optimistic
     await saveDoc("materiales", mat.id, updated);
     logAction("asignacion","Asignó material",`${mat.nombre} → ${equipo.tag}`, user?.name);
   };
 
-  const desvincular = (mat) => {
+  const desvincular = async (mat) => {
     if(!isSuperuser) return;
-    setMateriales(prev=>prev.map(m=>
-      m.id===mat.id ? {...m, equipoIds:(m.equipoIds||[]).filter(id=>id!==equipo.id)} : m
-    ));
+    const updated = {...mat, equipoIds:(mat.equipoIds||[]).filter(id=>id!==equipo.id)};
+    setMateriales(prev=>prev.map(m=>m.id===mat.id?updated:m)); // optimistic
+    await saveDoc("materiales", mat.id, updated);
   };
 
   return (
@@ -682,7 +683,8 @@ function EquiposTab({equipos,setEquipos,materiales,setMateriales,specialty,user,
 
   const save=async()=>{
     if(!form.tag.trim()||!form.nombre.trim()){setErr("El TAG y el Nombre son obligatorios.");return;}
-    const newEq = {id:Date.now(),tag:form.tag.trim(),subtag:form.subtag.trim(),nombre:form.nombre.trim(),specialty:specialty.id,lastIntervention:"—",photo:form.photo||null};
+    const newEq = {id:String(Date.now()),tag:form.tag.trim(),subtag:form.subtag.trim(),nombre:form.nombre.trim(),specialty:specialty.id,lastIntervention:"—",photo:form.photo||null};
+    setEquipos(prev=>[...prev, newEq]); // optimistic update
     await saveDoc("equipos", newEq.id, newEq);
     logAction("equipo","Cargó equipo",`${form.tag.trim()} — ${form.nombre.trim()}`, user?.name);
     setForm({tag:"",subtag:"",nombre:"",photo:null});setErr("");setShowModal(false);
@@ -822,7 +824,8 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
   const save=async()=>{
     if(!form.nombre.trim()||!form.codigo.trim()){setErr("El Nombre y el Código son obligatorios.");return;}
     const icons={lubricante:"🛢️",filtro:"🔩",herramienta:"🔧",componente:"⚡",repuesto:"⚙️"};
-    const newMat = {id:Date.now(),nombre:form.nombre.trim(),codigo:form.codigo.trim(),tipo:form.tipo,specialty:specialty.id,stock:form.stock||"—",icon:icons[form.tipo]||"📦",photo:form.photo||null,equipoIds:[]};
+    const newMat = {id:String(Date.now()),nombre:form.nombre.trim(),codigo:form.codigo.trim(),tipo:form.tipo,specialty:specialty.id,stock:form.stock||"—",icon:icons[form.tipo]||"📦",photo:form.photo||null,equipoIds:[]};
+    setMateriales(prev=>[...prev, newMat]); // optimistic update
     await saveDoc("materiales", newMat.id, newMat);
     logAction("material","Cargó material",`${form.nombre.trim()} (${form.codigo.trim()})`, user?.name);
     setForm({nombre:"",codigo:"",tipo:"lubricante",stock:"",photo:null});setErr("");setShowModal(false);
@@ -1522,6 +1525,15 @@ function MainApp({user,specialty,onLogout}) {
 
   return (
     <div style={{minHeight:"100vh",background:"#080b10",display:"flex",flexDirection:"column",fontFamily:M}}>
+      {cargando && (
+        <div style={{position:"fixed",inset:0,background:"#080b10",zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:20}}>
+          <GoldBoxLogo size={80} animate={true}/>
+          <div style={{color:g(.6),fontFamily:M,fontSize:11,letterSpacing:4}}>CARGANDO DATOS...</div>
+          <div style={{width:200,height:3,background:"rgba(255,255,255,.06)",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",background:"linear-gradient(90deg,#f5a623,#ffe066)",borderRadius:3,animation:"loadBar 1.5s ease-in-out infinite"}}/>
+          </div>
+        </div>
+      )}
       <GridBg/>
       {/* HEADER */}
       <header style={{position:"sticky",top:0,zIndex:10,background:"rgba(8,11,16,.97)",borderBottom:`1px solid ${g(.15)}`,backdropFilter:"blur(20px)",padding:"0 18px",display:"flex",alignItems:"center",justifyContent:"space-between",height:60}}>
