@@ -854,6 +854,7 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
   const filtered=materiales.filter(m=>m.specialty===specialty.id).filter(m=>filter==="todos"||m.tipo===filter);
 
   const [guardando,setGuardando] = useState(false);
+  const [editMat,setEditMat]     = useState(null);
 
   const save=async()=>{
     if(guardando) return;
