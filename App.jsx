@@ -642,6 +642,37 @@ function EquipoDetail({equipo,materiales,setMateriales,specialty,onBack,user,log
   );
 }
 
+// ── BUSCADOR RESULTADOS ───────────────────────────────────────────────────────
+function BuscadorResultados({busqueda, onSelect}) {
+  const normStr = s => s.toLowerCase().replace(/\s+/g,"");
+  const q  = busqueda.toLowerCase().trim();
+  const qn = normStr(busqueda);
+  const results = EQUIPOS_DB.filter(e=>
+    normStr(e.tag).includes(qn) ||
+    e.tag.toLowerCase().includes(q) ||
+    e.nombre.toLowerCase().includes(q)
+  ).slice(0,10);
+
+  if(results.length===0) return (
+    <div style={{marginTop:6,padding:"8px 14px",color:"rgba(255,255,255,.25)",fontFamily:"'Courier New',monospace",fontSize:11}}>
+      Sin resultados — cargalo manualmente abajo
+    </div>
+  );
+  return (
+    <div style={{marginTop:6,background:"#0d1117",border:"1px solid rgba(245,166,35,0.25)",borderRadius:8,overflow:"hidden",maxHeight:200,overflowY:"auto"}}>
+      {results.map((eq,i)=>(
+        <div key={i} onClick={()=>onSelect(eq)}
+          style={{padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid rgba(245,166,35,0.08)",transition:"background .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.background="rgba(245,166,35,0.08)"}
+          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+          <span style={{color:"#f5a623",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:700}}>{eq.tag}</span>
+          <span style={{color:"rgba(255,255,255,.45)",fontFamily:"'Courier New',monospace",fontSize:11,marginLeft:10}}>{eq.nombre}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── EQUIPO CARD (componente separado para poder usar useRef correctamente) ────
 function EquipoCard({eq, onSelect, onPhotoChange}) {
   const fileRef = useRef();
@@ -737,34 +768,7 @@ function EquiposTab({equipos,setEquipos,materiales,setMateriales,specialty,user,
                 padding:"11px 14px",color:"#fff",fontFamily:M,fontSize:12,outline:"none",boxSizing:"border-box"}}
             />
             {/* Resultados */}
-            {busqueda.length >= 1 && (()=>{
-              // Normalizar: quitar espacios para comparar sin importar formato
-              const norm = s => s.toLowerCase().replace(/\s+/g,'');
-              const q    = busqueda.toLowerCase().trim();
-              const qn   = norm(busqueda);
-              const results = EQUIPOS_DB.filter(e=>
-                norm(e.tag).includes(qn) ||
-                e.tag.toLowerCase().includes(q) ||
-                e.nombre.toLowerCase().includes(q)
-              ).slice(0,10);
-              return results.length > 0 ? (
-                <div style={{marginTop:6,background:"#0d1117",border:`1px solid ${g(.25)}`,borderRadius:8,overflow:"hidden",maxHeight:200,overflowY:"auto"}}>
-                  {results.map((eq,i)=>(
-                    <div key={i} onClick={()=>{setForm(p=>({...p,tag:eq.tag,nombre:eq.nombre}));setBusqueda("");}}
-                      style={{padding:"10px 14px",cursor:"pointer",borderBottom:`1px solid ${g(.08)}`,transition:"background .15s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=g(.08)}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <span style={{color:"#f5a623",fontFamily:M,fontSize:12,fontWeight:700}}>{eq.tag}</span>
-                      <span style={{color:"rgba(255,255,255,.45)",fontFamily:M,fontSize:11,marginLeft:10}}>{eq.nombre}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{marginTop:6,padding:"8px 14px",color:"rgba(255,255,255,.25)",fontFamily:M,fontSize:11}}>
-                  Sin resultados — podés cargarlo manualmente abajo
-                </div>
-              );
-            })()}
+            {busqueda.length >= 1 && <BuscadorResultados busqueda={busqueda} onSelect={(eq)=>{setForm(p=>({...p,tag:eq.tag,nombre:eq.nombre}));setBusqueda("");}}/>}
           </div>
 
           <div style={{height:1,background:g(.1),marginBottom:16}}/>
