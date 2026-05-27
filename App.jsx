@@ -935,6 +935,32 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
               <div style={{color:g(.4),fontFamily:M,fontSize:8,letterSpacing:2}}>ALMACÉN</div>
               <div style={{color:"#f5a623",fontFamily:M,fontSize:12}}>{mat.stock}</div>
             </div>
+            {/* Botones editar y eliminar — solo superusuario */}
+            {user?.role==="superuser" && (
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={()=>{
+                  setForm({nombre:mat.nombre,codigo:mat.codigo,tipo:mat.tipo,
+                    stock:mat.stock==="—"?"":mat.stock,photo:mat.photo||null});
+                  setEditMat(mat);
+                  setShowModal(true);
+                }} title="Editar"
+                  style={{background:"rgba(100,180,255,.08)",border:"1px solid rgba(100,180,255,.25)",
+                    borderRadius:7,padding:"7px 10px",color:"rgba(130,200,255,.8)",
+                    fontFamily:M,fontSize:12,cursor:"pointer"}}>
+                  ✏️
+                </button>
+                <button onClick={async()=>{
+                  if(!window.confirm("¿Eliminar "+mat.nombre+" del catálogo?")) return;
+                  setMateriales(prev=>prev.filter(m=>m.id!==mat.id));
+                  try{ await deleteDoc(doc(db,"materiales",String(mat.id))); }catch(e){}
+                }} title="Eliminar"
+                  style={{background:"rgba(255,40,40,.08)",border:"1px solid rgba(255,40,40,.2)",
+                    borderRadius:7,padding:"7px 10px",color:"rgba(255,80,80,.7)",
+                    fontFamily:M,fontSize:12,cursor:"pointer"}}>
+                  🗑
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
