@@ -92,9 +92,23 @@ const EQUIPOS_DB = [{"tag": "202 AF 101", "nombre": "Apron Feeder No1"}, {"tag":
 
 
 function readFile(file, cb) {
-  const r = new FileReader();
-  r.onload = e => cb(e.target.result);
-  r.readAsDataURL(file);
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = e => {
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX = 400; // max width/height in pixels
+      let w = img.width, h = img.height;
+      if(w > h) { if(w > MAX){ h = Math.round(h*MAX/w); w = MAX; } }
+      else       { if(h > MAX){ w = Math.round(w*MAX/h); h = MAX; } }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      cb(canvas.toDataURL("image/jpeg", 0.65)); // 65% quality JPEG
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 
@@ -1516,7 +1530,7 @@ function ActividadTab({activityLog, setActivityLog, usuarios, equipos, setEquipo
 }
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
-function MainApp({user,specialty,onLogout}) {
+function MainApp({user,specialty,onLogout,onChangeSpecialty}) {
   const [tab,setTab]               = useState("equipos");
   const [equipos,setEquipos]       = useState(INIT_EQUIPOS);
   const [materiales,setMateriales] = useState(INIT_MATERIALES);
@@ -1597,9 +1611,16 @@ function MainApp({user,specialty,onLogout}) {
           <span style={{fontSize:16,fontWeight:900,letterSpacing:5,background:"linear-gradient(180deg,#ffe066 0%,#f5a623 50%,#c97a00 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textShadow:"none",filter:"drop-shadow(0 0 8px rgba(245,166,35,0.6))"}}>GOLD BOX</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,background:`${specialty.color}12`,border:`1px solid ${specialty.color}40`,borderRadius:20,padding:"4px 12px"}}>
+          <div onClick={onChangeSpecialty}
+            style={{display:"flex",alignItems:"center",gap:6,background:`${specialty.color}12`,
+              border:`1px solid ${specialty.color}40`,borderRadius:20,padding:"4px 12px",
+              cursor:"pointer",transition:"all .2s"}}
+            title="Cambiar especialidad"
+            onMouseEnter={e=>{e.currentTarget.style.background=`${specialty.color}28`;}}
+            onMouseLeave={e=>{e.currentTarget.style.background=`${specialty.color}12`;}}>
             <span style={{fontSize:13}}>{specialty.icon}</span>
             <span style={{color:specialty.color,fontSize:9,letterSpacing:2}}>{specialty.label.toUpperCase()}</span>
+            <span style={{color:specialty.color,fontSize:9,opacity:0.6}}>⇄</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{width:30,height:30,background:"linear-gradient(135deg,#f5a623,#e8870a)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#000"}}>
@@ -1666,5 +1687,5 @@ export default function GoldBox() {
   if(screen==="login")     return <LoginScreen     onLogin={u=>{setUser(u);setScreen("welcome");}}/>;
   if(screen==="welcome")   return <WelcomeScreen    user={user} onContinue={()=>setScreen("specialty")}/>;
   if(screen==="specialty") return <SpecialtySelector user={user} onSelect={sp=>{setSpecialty(sp);setScreen("app");}}/>;
-  return <MainApp user={user} specialty={specialty} onLogout={()=>{setUser(null);setSpecialty(null);setScreen("login");}}/>;;
+  return <MainApp user={user} specialty={specialty} onLogout={()=>{setUser(null);setSpecialty(null);setScreen("login");}} onChangeSpecialty={()=>setScreen("specialty")}/>;;
 }
