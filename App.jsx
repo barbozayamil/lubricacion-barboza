@@ -1486,6 +1486,7 @@ function MainApp({user,specialty,onLogout}) {
   const [materiales,setMateriales] = useState(INIT_MATERIALES);
   const [usuarios,setUsuarios]     = useState(INIT_USUARIOS);
   const [sideOpen,setSideOpen]     = useState(true);
+  const [cargando,setCargando]     = useState(true);
   // ── SYNC FIRESTORE EN TIEMPO REAL ──
   useEffect(()=>{
     let loaded = {eq:false, mat:false};
