@@ -97,14 +97,15 @@ function readFile(file, cb) {
   reader.onload = e => {
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const MAX = 400; // max width/height in pixels
+      const MAX = 800; // max 800px — buena calidad visual
       let w = img.width, h = img.height;
       if(w > h) { if(w > MAX){ h = Math.round(h*MAX/w); w = MAX; } }
       else       { if(h > MAX){ w = Math.round(w*MAX/h); h = MAX; } }
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, w, h);
-      cb(canvas.toDataURL("image/jpeg", 0.65)); // 65% quality JPEG
+      // Calidad 0.85 — buena imagen, aprox 0.3-0.6MB según la foto
+      cb(canvas.toDataURL("image/jpeg", 0.85));
     };
     img.src = e.target.result;
   };
@@ -851,16 +852,30 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
   const [guardando,setGuardando] = useState(false);
 
   const save=async()=>{
-    if(guardando) return; // evitar doble click
+    if(guardando) return;
     if(!form.nombre.trim()||!form.codigo.trim()){setErr("El Nombre y el Código son obligatorios.");return;}
     setGuardando(true);
     const icons={lubricante:"🛢️",filtro:"🔩",herramienta:"🔧",componente:"⚡",repuesto:"⚙️"};
-    const newMat = {id:String(Date.now()),nombre:form.nombre.trim(),codigo:form.codigo.trim(),tipo:form.tipo,specialty:specialty.id,stock:form.stock||"—",icon:icons[form.tipo]||"📦",photo:form.photo||null,equipoIds:[]};
-    setShowModal(false); // cerrar modal primero
+    setShowModal(false);
     setForm({nombre:"",codigo:"",tipo:"lubricante",stock:"",photo:null});setErr("");
-    setMateriales(prev=>[...prev, newMat]);
-    await saveDoc("materiales", newMat.id, newMat);
-    logAction("material","Cargó material",`${form.nombre.trim()} (${form.codigo.trim()})`, user?.name);
+
+    if(editMat){
+      // Editar material existente
+      const updated = {...editMat, nombre:form.nombre.trim(), codigo:form.codigo.trim(),
+        tipo:form.tipo, stock:form.stock||"—", icon:icons[form.tipo]||"📦", photo:form.photo||editMat.photo||null};
+      setMateriales(prev=>prev.map(m=>m.id===editMat.id?updated:m));
+      await saveDoc("materiales", updated.id, updated);
+      logAction("material","Editó material",`${form.nombre.trim()} (${form.codigo.trim()})`, user?.name);
+      setEditMat(null);
+    } else {
+      // Nuevo material
+      const newMat = {id:String(Date.now()),nombre:form.nombre.trim(),codigo:form.codigo.trim(),
+        tipo:form.tipo,specialty:specialty.id,stock:form.stock||"—",icon:icons[form.tipo]||"📦",
+        photo:form.photo||null,equipoIds:[]};
+      setMateriales(prev=>[...prev, newMat]);
+      await saveDoc("materiales", newMat.id, newMat);
+      logAction("material","Cargó material",`${form.nombre.trim()} (${form.codigo.trim()})`, user?.name);
+    }
     setGuardando(false);
   };
 
@@ -869,7 +884,7 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
   return (
     <div>
       {showModal&&(
-        <Modal title="+ NUEVO MATERIAL" onClose={()=>{setShowModal(false);setErr("");}}>
+        <Modal title={editMat?"✏️ EDITAR MATERIAL":"+ NUEVO MATERIAL"} onClose={()=>{setShowModal(false);setErr("");setEditMat(null);setForm({nombre:"",codigo:"",tipo:"lubricante",stock:"",photo:null});}}>
           <GInput label="NOMBRE DEL MATERIAL" value={form.nombre} onChange={e=>setForm(p=>({...p,nombre:e.target.value}))} placeholder="Ej: Aceite ISO VG 220" required/>
           <GInput label="CÓDIGO / N° DE MATERIAL (ALMACÉN)" value={form.codigo} onChange={e=>setForm(p=>({...p,codigo:e.target.value}))} placeholder="Ej: MAT-001" required/>
           <GSelect label="TIPO" value={form.tipo} onChange={e=>setForm(p=>({...p,tipo:e.target.value}))} options={[
@@ -879,7 +894,7 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
           {err&&<div style={{color:"#f55",fontFamily:M,fontSize:11,marginBottom:12,padding:"8px 12px",background:"rgba(255,60,60,.08)",borderRadius:7,border:"1px solid rgba(255,60,60,.2)"}}>{err}</div>}
           <div style={{display:"flex",gap:10,marginTop:6}}>
             <BtnSecondary onClick={()=>{setShowModal(false);setErr("");}}>CANCELAR</BtnSecondary>
-            <BtnPrimary onClick={save} style={{flex:1,opacity:guardando?0.6:1}}>{guardando?"GUARDANDO...":"GUARDAR MATERIAL"}</BtnPrimary>
+            <BtnPrimary onClick={save} style={{flex:1,opacity:guardando?0.6:1}}>{guardando?"GUARDANDO...":editMat?"GUARDAR CAMBIOS":"GUARDAR MATERIAL"}</BtnPrimary>
           </div>
         </Modal>
       )}
