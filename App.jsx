@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { initializeApp }                                    from "firebase/app";
 import { getDatabase, ref, set, get, onValue, remove }     from "firebase/database";
 import { getFirestore, collection, doc, setDoc, getDocs,
-         onSnapshot, deleteDoc }                            from "firebase/firestore";
+         onSnapshot, deleteDoc, getDoc }                    from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -17,7 +17,14 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const rtdb        = getDatabase(firebaseApp);
 const db          = getFirestore(firebaseApp);
-const saveDoc     = async (col, id, data) => await setDoc(doc(db, col, String(id)), data);
+const saveDoc = async (col, id, data) => {
+  // Strip base64 photos before saving to Firestore (too large)
+  const clean = {...data};
+  if(clean.photo && typeof clean.photo === "string" && clean.photo.startsWith("data:")) {
+    clean.photo = null; // photos stored locally only for now
+  }
+  await setDoc(doc(db, col, String(id)), clean);
+};
 
 // ── HELPERS REALTIME DB ───────────────────────────────────────────────────────
 const rtSet  = async (path, data) => await set(ref(rtdb, path), data);
@@ -681,13 +688,19 @@ function EquiposTab({equipos,setEquipos,materiales,setMateriales,specialty,user,
       );
     });
 
+  const [guardandoEq,setGuardandoEq] = useState(false);
+
   const save=async()=>{
+    if(guardandoEq) return;
     if(!form.tag.trim()||!form.nombre.trim()){setErr("El TAG y el Nombre son obligatorios.");return;}
+    setGuardandoEq(true);
     const newEq = {id:String(Date.now()),tag:form.tag.trim(),subtag:form.subtag.trim(),nombre:form.nombre.trim(),specialty:specialty.id,lastIntervention:"—",photo:form.photo||null};
-    setEquipos(prev=>[...prev, newEq]); // optimistic update
+    setShowModal(false);
+    setForm({tag:"",subtag:"",nombre:"",photo:null});setErr("");setBusqueda("");
+    setEquipos(prev=>[...prev, newEq]);
     await saveDoc("equipos", newEq.id, newEq);
     logAction("equipo","Cargó equipo",`${form.tag.trim()} — ${form.nombre.trim()}`, user?.name);
-    setForm({tag:"",subtag:"",nombre:"",photo:null});setErr("");setShowModal(false);
+    setGuardandoEq(false);
   };
 
   if(selected) return <EquipoDetail equipo={selected} materiales={materiales} setMateriales={setMateriales} specialty={specialty} onBack={()=>setSelected(null)} user={user} logAction={logAction}/>;
@@ -749,7 +762,7 @@ function EquiposTab({equipos,setEquipos,materiales,setMateriales,specialty,user,
           {err&&<div style={{color:"#f55",fontFamily:M,fontSize:11,marginBottom:12,padding:"8px 12px",background:"rgba(255,60,60,.08)",borderRadius:7,border:"1px solid rgba(255,60,60,.2)"}}>{err}</div>}
           <div style={{display:"flex",gap:10,marginTop:6}}>
             <BtnSecondary onClick={()=>{setShowModal(false);setErr("");}}>CANCELAR</BtnSecondary>
-            <BtnPrimary onClick={save} style={{flex:1}}>GUARDAR EQUIPO</BtnPrimary>
+            <BtnPrimary onClick={save} style={{flex:1,opacity:guardandoEq?0.6:1}}>{guardandoEq?"GUARDANDO...":"GUARDAR EQUIPO"}</BtnPrimary>
           </div>
         </Modal>
       )}
@@ -821,14 +834,20 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
 
   const filtered=materiales.filter(m=>m.specialty===specialty.id).filter(m=>filter==="todos"||m.tipo===filter);
 
+  const [guardando,setGuardando] = useState(false);
+
   const save=async()=>{
+    if(guardando) return; // evitar doble click
     if(!form.nombre.trim()||!form.codigo.trim()){setErr("El Nombre y el Código son obligatorios.");return;}
+    setGuardando(true);
     const icons={lubricante:"🛢️",filtro:"🔩",herramienta:"🔧",componente:"⚡",repuesto:"⚙️"};
     const newMat = {id:String(Date.now()),nombre:form.nombre.trim(),codigo:form.codigo.trim(),tipo:form.tipo,specialty:specialty.id,stock:form.stock||"—",icon:icons[form.tipo]||"📦",photo:form.photo||null,equipoIds:[]};
-    setMateriales(prev=>[...prev, newMat]); // optimistic update
+    setShowModal(false); // cerrar modal primero
+    setForm({nombre:"",codigo:"",tipo:"lubricante",stock:"",photo:null});setErr("");
+    setMateriales(prev=>[...prev, newMat]);
     await saveDoc("materiales", newMat.id, newMat);
     logAction("material","Cargó material",`${form.nombre.trim()} (${form.codigo.trim()})`, user?.name);
-    setForm({nombre:"",codigo:"",tipo:"lubricante",stock:"",photo:null});setErr("");setShowModal(false);
+    setGuardando(false);
   };
 
   const filterBtns=[{v:"todos",l:"TODOS"},{v:"lubricante",l:"LUBRICANTES"},{v:"filtro",l:"FILTROS"},{v:"herramienta",l:"HERRAMIENTAS"},{v:"repuesto",l:"REPUESTOS"},{v:"componente",l:"COMPONENTES"}];
@@ -846,7 +865,7 @@ function CatalogoTab({materiales,setMateriales,specialty,user,logAction}) {
           {err&&<div style={{color:"#f55",fontFamily:M,fontSize:11,marginBottom:12,padding:"8px 12px",background:"rgba(255,60,60,.08)",borderRadius:7,border:"1px solid rgba(255,60,60,.2)"}}>{err}</div>}
           <div style={{display:"flex",gap:10,marginTop:6}}>
             <BtnSecondary onClick={()=>{setShowModal(false);setErr("");}}>CANCELAR</BtnSecondary>
-            <BtnPrimary onClick={save} style={{flex:1}}>GUARDAR MATERIAL</BtnPrimary>
+            <BtnPrimary onClick={save} style={{flex:1,opacity:guardando?0.6:1}}>{guardando?"GUARDANDO...":"GUARDAR MATERIAL"}</BtnPrimary>
           </div>
         </Modal>
       )}
@@ -942,27 +961,43 @@ function UsuariosTab({usuarios,setUsuarios}) {
       if(form.pass.trim()) updated.passHash = simpleHash(form.pass.trim());
       delete updated.pass;
       setUsuarios(prev=>prev.map(u=>u.id===editUser.id?updated:u));
-      // Guardar en Realtime DB
       const ukey = form.user.trim().toLowerCase().replace(/\s+/g,"_");
       rtSet("usuarios/"+ukey, {...updated});
+      // También guardar en Firestore para el gestor
+      saveDoc("usuarios", updated.id, updated);
     } else {
       if(!form.pass.trim()){setErr("La contraseña es obligatoria.");return;}
       const newU = {
-        id:Date.now(), name:form.name.trim(), user:form.user.trim(),
+        id:String(Date.now()), name:form.name.trim(), user:form.user.trim(),
         role:form.role, specialty:form.specialty, active:true,
         passHash: simpleHash(form.pass.trim()),
         username: form.user.trim().toLowerCase().replace(/\s+/g,"_"),
       };
       setUsuarios(prev=>[...prev, newU]);
-      // Guardar en Realtime DB
-      const ukey = form.user.trim().toLowerCase().replace(/\s+/g,"_");
+      const ukey = newU.username;
       rtSet("usuarios/"+ukey, newU);
+      // También guardar en Firestore para el gestor
+      saveDoc("usuarios", newU.id, newU);
     }
     setShowModal(false);setErr("");
   };
 
-  const toggleActive=(id)=>setUsuarios(prev=>prev.map(u=>u.id===id?{...u,active:!u.active}:u));
-  const deleteUser=(id)=>setUsuarios(prev=>prev.filter(u=>u.id!==id));
+  const toggleActive=(id)=>{
+    setUsuarios(prev=>{
+      const updated = prev.map(u=>u.id===id?{...u,active:!u.active}:u);
+      const u = updated.find(x=>x.id===id);
+      if(u){ saveDoc("usuarios",u.id,u); rtSet("usuarios/"+(u.username||u.user),u); }
+      return updated;
+    });
+  };
+  const deleteUser=(id)=>{
+    const u = usuarios.find(x=>x.id===id);
+    setUsuarios(prev=>prev.filter(x=>x.id!==id));
+    if(u){
+      deleteDoc(doc(db,"usuarios",String(id)));
+      rtSet("usuarios/"+(u.username||u.user), null);
+    }
+  };
 
   const roleInfo=(id)=>ROLES.find(r=>r.id===id)||ROLES[2];
   const spInfo=(id)=>SPECIALTIES.find(s=>s.id===id)||SPECIALTIES[0];
