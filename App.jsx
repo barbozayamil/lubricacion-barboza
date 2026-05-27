@@ -1118,6 +1118,7 @@ function ActividadTab({activityLog, setActivityLog, usuarios, equipos, setEquipo
 
   const deshacer = (entry) => {
     setActivityLog(prev=>prev.map(e=> e.id===entry.id ? {...e, deshecho:true} : e));
+    saveDoc("activityLog", entry.id, {...entry, deshecho:true});
   };
 
   const iniciarEdicion = (entry) => {
@@ -1541,25 +1542,28 @@ function MainApp({user,specialty,onLogout}) {
       if(!snap.empty) setUsuarios(snap.docs.map(d=>({...d.data(), id:d.id})));
     });
 
-    return ()=>{ unsubEq(); unsubMat(); unsubUs(); };
+    const unsubLog = onSnapshot(collection(db,"activityLog"), snap=>{
+      if(!snap.empty){
+        const logs = snap.docs.map(d=>({...d.data(),id:d.id}));
+        logs.sort((a,b)=>b.fecha-a.fecha);
+        setActivityLog(logs);
+      }
+    });
+
+    return ()=>{ unsubEq(); unsubMat(); unsubUs(); unsubLog(); };
   },[]);
-  const [activityLog,setActivityLog] = useState([
-    {id:1, tipo:"equipo",    accion:"Cargó equipo",      detalle:"206 RL 101 — Reductor Principal",  usuario:"Yamil García", fecha: Date.now()-3600000*2,  deshecho:false},
-    {id:2, tipo:"material",  accion:"Cargó material",    detalle:"Aceite ISO VG 220 (MAT-001)",       usuario:"Martín López", fecha: Date.now()-3600000*5,  deshecho:false},
-    {id:3, tipo:"asignacion",accion:"Asignó material",   detalle:"Grasa NLGI 2 → 206 RL 101",        usuario:"Martín López", fecha: Date.now()-3600000*6,  deshecho:false},
-    {id:4, tipo:"equipo",    accion:"Cargó equipo",      detalle:"221 AG 101 — Agitador Tanque",      usuario:"Yamil García", fecha: Date.now()-3600000*24, deshecho:false},
-    {id:5, tipo:"material",  accion:"Cargó material",    detalle:"Filtro Respiro 3μm (FIL-003)",      usuario:"Yamil García", fecha: Date.now()-3600000*25, deshecho:false},
-    {id:6, tipo:"asignacion",accion:"Asignó material",   detalle:"Filtro Aceite HF-201 → 221 AG 101",usuario:"Carla Ruiz",   fecha: Date.now()-3600000*48, deshecho:false},
-  ]);
+  const [activityLog,setActivityLog] = useState([]);
 
   const logAction = (tipo, accion, detalle, userName) => {
-    setActivityLog(prev=>[{
-      id: Date.now(),
+    const entry = {
+      id: String(Date.now()),
       tipo, accion, detalle,
       usuario: userName || "Usuario",
       fecha: Date.now(),
       deshecho: false,
-    }, ...prev]);
+    };
+    setActivityLog(prev=>[entry, ...prev]);
+    saveDoc("activityLog", entry.id, entry);
   };
 
   const isSuperuser = user.role==="superuser";
